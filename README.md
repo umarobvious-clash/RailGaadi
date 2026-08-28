@@ -194,12 +194,3 @@ RailGaadi/
 └── README.md
 ````
 
-Then GitHub will display them automatically because the README contains:
-
-```markdown
-![RailGaadi Home Page](screenshots/home.png)
-```
-
-**This is the next thing I'd do with you:** take the three screenshots you already showed me—home page, journey/map page, and analytics—and save them into a `screenshots` folder, then commit and push the README + screenshots together.
-
-Also, one correction from earlier: **GitHub isn't intelligently rewriting your Markdown into emojis/headings.** GitHub renders Markdown syntax visually. The `#`, `##`, `-`, `![...]`, etc. are formatting instructions; GitHub displays the formatted result rather than the raw Markdown.
