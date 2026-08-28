@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Map as MapLibreMap, Marker, Popup, type GeoJSONSource } from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import * as maptilersdk from '@maptiler/sdk';
+import '@maptiler/sdk/dist/maptiler-sdk.css';
 import { MapControls } from './MapControls';
 import { FollowTrainButton } from './FollowTrainButton';
 import { getRouteBounds } from '../../utils/geo';
@@ -15,26 +15,27 @@ interface JourneyMapProps {
 
 export function JourneyMap({ route, liveJourney, features = [], className = '' }: JourneyMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<MapLibreMap | null>(null);
-  const trainMarkerRef = useRef<Marker | null>(null);
-  const stationMarkersRef = useRef<Marker[]>([]);
-  const poiMarkersRef = useRef<Marker[]>([]);
+  const mapRef = useRef<maptilersdk.Map | null>(null);
+  const trainMarkerRef = useRef<maptilersdk.Marker | null>(null);
+  const stationMarkersRef = useRef<maptilersdk.Marker[]>([]);
+  const poiMarkersRef = useRef<maptilersdk.Marker[]>([]);
   const isMapRemovedRef = useRef(false);
 
   const [isFollowing, setIsFollowing] = useState(false);
   const [showRecenter, setShowRecenter] = useState(false);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
-  const [mapStyleType, setMapStyleType] = useState<'backdrop-dark' | 'streets-v2-dark' | 'streets-v2' | 'outdoor-v2'>('backdrop-dark');
+  const [mapStyleType, setMapStyleType] = useState<string>('backdrop-dark');
 
   const maptilerKey = import.meta.env.VITE_MAPTILER_API_KEY || '8IP9mXyG1YNXPzrkgg8p';
-  const getStyleUrl = (styleName: string) =>
-    `https://api.maptiler.com/maps/${styleName}/style.json?key=${maptilerKey}`;
+  maptilersdk.config.apiKey = maptilerKey;
 
   // Helper to add GeoJSON line layers
-  const addRouteLayersToMap = useCallback((mapInstance: MapLibreMap, coords: [number, number][]) => {
+  const addRouteLayersToMap = useCallback((mapInstance: maptilersdk.Map, coords: [number, number][]) => {
     if (!mapInstance || !mapInstance.isStyleLoaded()) return;
 
-    const validCoords = coords.filter(c => Array.isArray(c) && c.length >= 2 && !isNaN(c[0]) && !isNaN(c[1]));
+    const validCoords = coords.filter(
+      c => Array.isArray(c) && c.length >= 2 && !isNaN(c[0]) && !isNaN(c[1]) && (c[0] !== 0 || c[1] !== 0)
+    );
     if (validCoords.length < 2) return;
 
     const geojsonData: GeoJSON.Feature<GeoJSON.LineString> = {
@@ -46,7 +47,7 @@ export function JourneyMap({ route, liveJourney, features = [], className = '' }
       },
     };
 
-    const existingSource = mapInstance.getSource('train-route') as GeoJSONSource | undefined;
+    const existingSource = mapInstance.getSource('train-route') as maptilersdk.GeoJSONSource | undefined;
     if (existingSource) {
       existingSource.setData(geojsonData);
       return;
@@ -135,12 +136,20 @@ export function JourneyMap({ route, liveJourney, features = [], className = '' }
     const coords = route.geometry?.coordinates ?? [];
     const bounds = getRouteBounds(coords);
 
-    const map = new MapLibreMap({
+    // Map style mapping for MapTiler SDK
+    let styleToUse: any = maptilersdk.MapStyle.BACKDROP.DARK;
+    if (mapStyleType === 'streets-v2-dark') styleToUse = maptilersdk.MapStyle.STREETS.DARK;
+    else if (mapStyleType === 'outdoor-v2') styleToUse = maptilersdk.MapStyle.OUTDOOR;
+    else if (mapStyleType === 'streets-v2') styleToUse = maptilersdk.MapStyle.STREETS;
+    else if (mapStyleType === 'topo-v2') styleToUse = maptilersdk.MapStyle.TOPO;
+    else if (mapStyleType === 'satellite') styleToUse = maptilersdk.MapStyle.SATELLITE;
+
+    const map = new maptilersdk.Map({
       container: mapContainerRef.current,
-      style: getStyleUrl(mapStyleType),
+      style: styleToUse,
       bounds: bounds,
       fitBoundsOptions: { padding: 60, maxZoom: 12 },
-      attributionControl: false,
+      attributionControl: { compact: true },
     });
 
     map.on('dragstart', () => {
@@ -222,7 +231,7 @@ export function JourneyMap({ route, liveJourney, features = [], className = '' }
         "></div>
       `;
 
-      const popup = new Popup({ offset: 12, closeButton: false }).setHTML(`
+      const popup = new maptilersdk.Popup({ offset: 12, closeButton: false }).setHTML(`
         <div style="padding:6px;font-family:system-ui,sans-serif;min-width:130px;background:#0f172a;color:#ffffff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.5);">
           <div style="font-weight:700;font-size:12px;color:#00e5ff;">${st.name}</div>
           <div style="font-size:11px;color:#cbd5e1;margin-top:2px;">
@@ -235,7 +244,7 @@ export function JourneyMap({ route, liveJourney, features = [], className = '' }
         </div>
       `);
 
-      const marker = new Marker({ element: el })
+      const marker = new maptilersdk.Marker({ element: el })
         .setLngLat([st.longitude, st.latitude])
         .setPopup(popup)
         .addTo(map);
@@ -277,7 +286,7 @@ export function JourneyMap({ route, liveJourney, features = [], className = '' }
         document.head.appendChild(style);
       }
 
-      const popup = new Popup({ offset: 22, closeButton: false }).setHTML(`
+      const popup = new maptilersdk.Popup({ offset: 22, closeButton: false }).setHTML(`
         <div style="padding:8px;font-family:system-ui,sans-serif;background:#0f172a;color:#ffffff;border-radius:8px;min-width:160px;box-shadow:0 6px 16px rgba(0,0,0,0.6);">
           <div style="font-weight:700;font-size:13px;color:#00e5ff;">${liveJourney.train.name}</div>
           <div style="font-size:11px;color:#cbd5e1;margin-top:3px;">
@@ -292,7 +301,7 @@ export function JourneyMap({ route, liveJourney, features = [], className = '' }
         </div>
       `);
 
-      trainMarkerRef.current = new Marker({ element: el })
+      trainMarkerRef.current = new maptilersdk.Marker({ element: el })
         .setLngLat([lng, lat])
         .setPopup(popup)
         .addTo(map);
@@ -319,7 +328,7 @@ export function JourneyMap({ route, liveJourney, features = [], className = '' }
       const el = document.createElement('div');
       el.style.cssText = 'cursor:pointer;width:26px;height:26px;border-radius:50%;background:#1e293b;border:1px solid #475569;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
       el.textContent = iconMap[feat.type] || '📍';
-      const marker = new Marker({ element: el }).setLngLat([feat.longitude, feat.latitude]).addTo(map);
+      const marker = new maptilersdk.Marker({ element: el }).setLngLat([feat.longitude, feat.latitude]).addTo(map);
       poiMarkersRef.current.push(marker);
     });
   }, [features]);
@@ -346,7 +355,7 @@ export function JourneyMap({ route, liveJourney, features = [], className = '' }
 
   return (
     <div className={`relative w-full h-full overflow-hidden ${className}`}>
-      {/* MapLibre container with explicit absolute positioning */}
+      {/* MapLibre / MapTiler container with explicit absolute positioning */}
       <div
         ref={mapContainerRef}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
@@ -356,7 +365,7 @@ export function JourneyMap({ route, liveJourney, features = [], className = '' }
       <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
         <select
           value={mapStyleType}
-          onChange={(e) => setMapStyleType(e.target.value as any)}
+          onChange={(e) => setMapStyleType(e.target.value)}
           aria-label="Map style selector"
           style={{
             background: 'rgba(15,23,42,0.92)',
@@ -375,6 +384,7 @@ export function JourneyMap({ route, liveJourney, features = [], className = '' }
           <option value="streets-v2-dark">🌃 Dark Streets</option>
           <option value="outdoor-v2">🏔️ Topo Terrain (Outdoor)</option>
           <option value="streets-v2">🗺️ Crisp Streets</option>
+          <option value="satellite">🛰️ Satellite Hybrid</option>
         </select>
 
         <button
