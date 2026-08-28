@@ -1,12 +1,8 @@
 
 
-Yes. Now that the polished version is pushed, **README is the next thing to polish**. You don't need to change the project code for this.
 
-For your RailGaadi project, I recommend keeping the README professional and honest—especially since you're using this as a portfolio project and you're still learning the technologies.
 
-### Replace your current README with this
 
-````markdown
 # 🚆 RailGaadi
 
 RailGaadi is a full-stack live train tracking application designed to provide train information, journey progress, route visualization, weather information, and journey analytics through a single interface.
