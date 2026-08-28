@@ -22,19 +22,9 @@ This project was built as a practical learning project to understand how a moder
 - 🗺️ Interactive map controls and route visualization
 - 🔐 Environment-based API configuration
 
-## 🖥️ Application Preview
+## 📸 Application Preview
 
-### Home Page
-
-![RailGaadi Home Page](screenshots/home.png)
-
-### Live Journey & Route Map
-
-![RailGaadi Journey Map](screenshots/journey-map.png)
-
-### Journey Analytics
-
-![RailGaadi Analytics](screenshots/analytics.png)
+![RailGaadi Application Preview](railgaadi-preview.png)
 
 ## 🛠️ Tech Stack
 
