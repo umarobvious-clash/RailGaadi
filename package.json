@@ -4,10 +4,14 @@
   "description": "RailGaadi - Real-Time Indian Railway Intelligence and Journey Companion",
   "private": true,
   "scripts": {
+    "dev": "concurrently -n \"backend,frontend\" -c \"green,cyan\" \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
     "build:backend": "npm --prefix backend run build",
     "build:frontend": "npm --prefix frontend run build",
     "build": "npm run build:backend && npm run build:frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }
