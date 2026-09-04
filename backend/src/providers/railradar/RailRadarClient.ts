@@ -9,36 +9,6 @@ import {
   STATION_COORDS,
 } from './normalizer';
 
-// Directory of popular Indian trains to support text search by name
-const POPULAR_TRAINS_DIRECTORY: Array<{ number: string; name: string; origin: string; dest: string }> = [
-  { number: '12301', name: 'Howrah - New Delhi Rajdhani Express', origin: 'HWH', dest: 'NDLS' },
-  { number: '12302', name: 'New Delhi - Howrah Rajdhani Express', origin: 'NDLS', dest: 'HWH' },
-  { number: '12951', name: 'Mumbai Central - New Delhi Tejas Rajdhani Express', origin: 'MMCT', dest: 'NDLS' },
-  { number: '12952', name: 'New Delhi - Mumbai Central Tejas Rajdhani Express', origin: 'NDLS', dest: 'MMCT' },
-  { number: '12953', name: 'August Kranti Tejas Rajdhani Express', origin: 'MMCT', dest: 'NZM' },
-  { number: '22691', name: 'Bengaluru Rajdhani Express', origin: 'SBC', dest: 'NZM' },
-  { number: '22692', name: 'Hazrat Nizamuddin - Bengaluru Rajdhani Express', origin: 'NZM', dest: 'SBC' },
-  { number: '12424', name: 'New Delhi - Dibrugarh Rajdhani Express', origin: 'NDLS', dest: 'DBRG' },
-  { number: '22436', name: 'New Delhi - Varanasi Vande Bharat Express', origin: 'NDLS', dest: 'BSB' },
-  { number: '22435', name: 'Varanasi - New Delhi Vande Bharat Express', origin: 'BSB', dest: 'NDLS' },
-  { number: '22439', name: 'New Delhi - SMVD Katra Vande Bharat Express', origin: 'NDLS', dest: 'SVDK' },
-  { number: '20607', name: 'Chennai Central - Mysuru Vande Bharat Express', origin: 'MAS', dest: 'MYS' },
-  { number: '12004', name: 'New Delhi - Lucknow Shatabdi Express', origin: 'NDLS', dest: 'LJN' },
-  { number: '12002', name: 'New Delhi - Rani Kamlapati Shatabdi Express', origin: 'NDLS', dest: 'RKMP' },
-  { number: '12295', name: 'Sanghamitra SF Express (SMVB - DNR)', origin: 'SMVB', dest: 'DNR' },
-  { number: '12296', name: 'Sanghamitra SF Express (DNR - SMVB)', origin: 'DNR', dest: 'SMVB' },
-  { number: '12345', name: 'Saraighat Express', origin: 'HWH', dest: 'GHY' },
-  { number: '12626', name: 'Kerala Express', origin: 'NDLS', dest: 'TVC' },
-  { number: '12841', name: 'Coromandel Express', origin: 'HWH', dest: 'MAS' },
-  { number: '12801', name: 'Purushottam Express', origin: 'PURI', dest: 'NDLS' },
-  { number: '12137', name: 'Punjab Mail', origin: 'CSMT', dest: 'FZR' },
-  { number: '12779', name: 'Goa Express', origin: 'VSG', dest: 'NZM' },
-  { number: '12859', name: 'Gitanjali Express', origin: 'CSMT', dest: 'HWH' },
-  { number: '12925', name: 'Paschim Express', origin: 'BDTS', dest: 'ASR' },
-  { number: '12559', name: 'Shiv Ganga Express', origin: 'BSBS', dest: 'NDLS' },
-  { number: '12393', name: 'Sampoorna Kranti Express', origin: 'RJPB', dest: 'NDLS' },
-];
-
 export class RailRadarClient {
   private readonly baseUrl: string;
   private readonly apiKey?: string;
@@ -46,6 +16,7 @@ export class RailRadarClient {
   // Shared in-memory cache
   private static liveCache = new Map<string, { data: any; expiry: number }>();
   private static routeCache = new Map<string, { data: any; expiry: number }>();
+  private static directoryCache?: { data: Record<string, string>; expiry: number };
 
   constructor() {
     this.baseUrl = 'https://api.railradar.in/v1';
@@ -107,8 +78,11 @@ export class RailRadarClient {
       RailRadarClient.liveCache.set(cleanNumber, { data: payload, expiry: now + 30000 }); // 30s TTL
       return payload;
     } catch (err: any) {
-      if (cached) {
-        return cached.data; // Serve stale cache on rate limit
+      // A very short grace period smooths transient provider failures without
+      // presenting yesterday's position as if it were live.
+      if (cached && now <= cached.expiry + 120000) {
+        logger.warn({ trainNumber: cleanNumber }, 'Serving last verified live response because RailRadar is unavailable');
+        return cached.data;
       }
       throw err;
     }
@@ -123,16 +97,40 @@ export class RailRadarClient {
     }
 
     try {
-      const res = await this.fetchApi<any>(`/trains/${cleanNumber}/route`);
+      const res = await this.fetchApi<any>(`/trains/${cleanNumber}/route?format=geojson&stops=true`);
       const payload = res.data || res;
       RailRadarClient.routeCache.set(cleanNumber, { data: payload, expiry: now + 86400000 }); // 24h TTL
       return payload;
     } catch (err: any) {
       if (cached) {
+        logger.warn({ trainNumber: cleanNumber }, 'Serving last verified route because RailRadar is unavailable');
         return cached.data;
       }
-      logger.warn({ trainNumber: cleanNumber }, 'Could not fetch route GeoJSON from RailRadar');
-      return null;
+      throw err;
+    }
+  }
+
+  private async getTrainDirectory(): Promise<Record<string, string>> {
+    const now = Date.now();
+    const cached = RailRadarClient.directoryCache;
+    if (cached && cached.expiry > now) {
+      return cached.data;
+    }
+
+    try {
+      const res = await this.fetchApi<any>('/lookup/trains/prs');
+      const directory = res.data || res;
+      if (!directory || Array.isArray(directory) || typeof directory !== 'object') {
+        throw new Error('RailRadar PRS train directory response is invalid');
+      }
+      RailRadarClient.directoryCache = { data: directory, expiry: now + 86400000 };
+      return directory;
+    } catch (error) {
+      if (cached) {
+        logger.warn('Serving last verified PRS train directory because RailRadar is unavailable');
+        return cached.data;
+      }
+      throw error;
     }
   }
 
@@ -143,47 +141,44 @@ export class RailRadarClient {
     const matches: Train[] = [];
     const seen = new Set<string>();
 
-    if (/^\d{3,5}$/.test(q)) {
-      try {
-        const livePayload = await this.getRawLivePayload(q);
-        if (livePayload && (livePayload.trainNumber || livePayload.train)) {
-          const train = normalizeRailRadarTrain(livePayload);
-          matches.push(train);
-          seen.add(train.number);
-        }
-      } catch (err) {
-        logger.warn({ trainNumber: q }, 'RailRadar live train lookup by number not found or errored');
+    const directory = await this.getTrainDirectory();
+    for (const [number, encodedDetails] of Object.entries(directory)) {
+      const [name = `Train ${number}`, origin = '', destination = ''] = String(encodedDetails).split('|');
+      if (
+        number.includes(q) ||
+        name.toLowerCase().includes(q) ||
+        origin.toLowerCase().includes(q) ||
+        destination.toLowerCase().includes(q)
+      ) {
+        const originDetails = STATION_COORDS[origin];
+        const destinationDetails = STATION_COORDS[destination];
+        matches.push({
+          id: number,
+          number,
+          name,
+          origin: {
+            id: origin || 'ORG',
+            code: origin || undefined,
+            name: originDetails?.name || origin || 'Origin unavailable',
+          },
+          destination: {
+            id: destination || 'DST',
+            code: destination || undefined,
+            name: destinationDetails?.name || destination || 'Destination unavailable',
+          },
+        });
+        seen.add(number);
+        if (matches.length >= 10) break;
       }
     }
 
-    for (const item of POPULAR_TRAINS_DIRECTORY) {
-      if (
-        item.number.includes(q) ||
-        item.name.toLowerCase().includes(q) ||
-        item.origin.toLowerCase().includes(q) ||
-        item.dest.toLowerCase().includes(q)
-      ) {
-        if (!seen.has(item.number)) {
-          const orgCoords = STATION_COORDS[item.origin] || { name: item.origin };
-          const dstCoords = STATION_COORDS[item.dest] || { name: item.dest };
-
-          matches.push({
-            id: item.number,
-            number: item.number,
-            name: item.name,
-            origin: {
-              id: item.origin,
-              code: item.origin,
-              name: orgCoords.name,
-            },
-            destination: {
-              id: item.dest,
-              code: item.dest,
-              name: dstCoords.name,
-            },
-          });
-          seen.add(item.number);
-        }
+    if (/^\d{5}$/.test(q) && seen.has(q)) {
+      try {
+        const verifiedTrain = normalizeRailRadarTrain(await this.getRawLivePayload(q));
+        const exactIndex = matches.findIndex((train) => train.number === q);
+        if (exactIndex >= 0) matches[exactIndex] = verifiedTrain;
+      } catch (error) {
+        logger.warn({ trainNumber: q }, 'Could not enrich exact train search with live metadata');
       }
     }
 
@@ -222,6 +217,8 @@ export class RailRadarClient {
       const currentSeq = livePayload.currentLocation?.sequence;
       stations = normalizeRailRadarStations(livePayload.route, routeCoordinates, currentSeq);
       totalDistanceKm = livePayload.train?.distance ?? livePayload.totalDistanceKm ?? livePayload.route[livePayload.route.length - 1]?.distance ?? 0;
+    } else if (Array.isArray(routePayload.stops)) {
+      stations = normalizeRailRadarStations(routePayload.stops, routeCoordinates);
     }
 
     return normalizeRailRadarRoute(routePayload, stations, totalDistanceKm, cleanNumber);

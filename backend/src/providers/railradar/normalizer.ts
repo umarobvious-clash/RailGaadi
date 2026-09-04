@@ -145,20 +145,22 @@ export function normalizeRailRadarTrain(raw: any): Train {
 
   const src = d.source || d.origin || {};
   const dst = d.destination || {};
+  const sourceCode = src.code || 'ORG';
+  const destinationCode = dst.code || 'DST';
 
   return {
     id: number,
     number: number,
     name: name,
     origin: {
-      id: src.code || 'ORG',
+      id: sourceCode,
       code: src.code,
-      name: src.name || src.code || 'Origin Station',
+      name: STATION_COORDS[sourceCode]?.name || src.name || src.code || 'Origin Station',
     },
     destination: {
-      id: dst.code || 'DST',
+      id: destinationCode,
       code: dst.code,
-      name: dst.name || dst.code || 'Destination Station',
+      name: STATION_COORDS[destinationCode]?.name || dst.name || dst.code || 'Destination Station',
     },
   };
 }
@@ -171,6 +173,15 @@ export function normalizeRailRadarLive(raw: any, routeCoordinates: [number, numb
   const d = raw.data || raw;
   const trainNumber = String(d.trainNumber || d.train?.number || '').trim();
   const trainName = d.trainName || d.train?.name || `Train ${trainNumber}`;
+  const routeArray = Array.isArray(d.route) ? d.route : [];
+  const currentSequence = d.currentLocation?.sequence;
+  const currentCode = d.currentLocation?.stationCode;
+  const currentRouteIndex = routeArray.findIndex((stop: any) =>
+    (typeof currentSequence === 'number' && stop.sequence === currentSequence) ||
+    (currentCode && stop.stationCode === currentCode)
+  );
+  const currentRouteStop = currentRouteIndex >= 0 ? routeArray[currentRouteIndex] : undefined;
+  const nextRouteStop = currentRouteIndex >= 0 ? routeArray[currentRouteIndex + 1] : undefined;
 
   let state: JourneyStatus = 'RUNNING';
   const rawStatus = String(d.status || '').toLowerCase();
@@ -188,8 +199,19 @@ export function normalizeRailRadarLive(raw: any, routeCoordinates: [number, numb
     state = 'ON_TIME';
   }
 
-  const distanceTravelledKm = d.currentLocation?.distanceFromOriginKm ?? d.distanceCoveredKm ?? 0;
-  const routeArray = Array.isArray(d.route) ? d.route : [];
+  let distanceTravelledKm = d.currentLocation?.distanceFromOriginKm ?? d.distanceCoveredKm ?? currentRouteStop?.distance ?? 0;
+  const segmentProgress = Number(d.currentLocation?.segmentProgress);
+  if (
+    Number.isFinite(segmentProgress) &&
+    segmentProgress > 0 &&
+    currentRouteStop &&
+    nextRouteStop &&
+    typeof currentRouteStop.distance === 'number' &&
+    typeof nextRouteStop.distance === 'number'
+  ) {
+    const progress = Math.min(1, segmentProgress);
+    distanceTravelledKm = currentRouteStop.distance + (nextRouteStop.distance - currentRouteStop.distance) * progress;
+  }
   const lastRouteStop = routeArray.length > 0 ? routeArray[routeArray.length - 1] : undefined;
   const totalDistanceKm = d.train?.distance ?? d.totalDistanceKm ?? lastRouteStop?.distance ?? 0;
   const distanceRemainingKm = totalDistanceKm > distanceTravelledKm ? totalDistanceKm - distanceTravelledKm : 0;
@@ -199,6 +221,22 @@ export function normalizeRailRadarLive(raw: any, routeCoordinates: [number, numb
   let location: { lat: number; lng: number } | undefined;
   if (typeof d.currentLocation?.lat === 'number' && typeof d.currentLocation?.lng === 'number' && d.currentLocation.lat !== 0) {
     location = { lat: d.currentLocation.lat, lng: d.currentLocation.lng };
+  } else if (
+    Number.isFinite(segmentProgress) &&
+    currentRouteStop &&
+    nextRouteStop &&
+    typeof currentRouteStop.lat === 'number' &&
+    typeof currentRouteStop.lng === 'number' &&
+    typeof nextRouteStop.lat === 'number' &&
+    typeof nextRouteStop.lng === 'number'
+  ) {
+    const progress = Math.min(1, Math.max(0, segmentProgress));
+    location = {
+      lat: currentRouteStop.lat + (nextRouteStop.lat - currentRouteStop.lat) * progress,
+      lng: currentRouteStop.lng + (nextRouteStop.lng - currentRouteStop.lng) * progress,
+    };
+  } else if (typeof currentRouteStop?.lat === 'number' && typeof currentRouteStop?.lng === 'number') {
+    location = { lat: currentRouteStop.lat, lng: currentRouteStop.lng };
   } else if (d.currentLocation?.stationCode && STATION_COORDS[d.currentLocation.stationCode]) {
     const coords = STATION_COORDS[d.currentLocation.stationCode];
     location = { lat: coords.lat, lng: coords.lng };
@@ -238,7 +276,7 @@ export function normalizeRailRadarLive(raw: any, routeCoordinates: [number, numb
     currentStation = {
       id: d.currentLocation.stationCode,
       code: d.currentLocation.stationCode,
-      name: d.currentLocation.stationName || d.currentLocation.stationCode,
+      name: d.currentLocation.stationName || currentRouteStop?.stationName || d.currentLocation.stationCode,
     };
   }
 
@@ -253,10 +291,11 @@ export function normalizeRailRadarLive(raw: any, routeCoordinates: [number, numb
 
   let destination: { id: string; code?: string; name: string } | undefined;
   if (d.train?.destination?.code) {
+    const destinationCode = d.train.destination.code;
     destination = {
-      id: d.train.destination.code,
-      code: d.train.destination.code,
-      name: d.train.destination.name || d.train.destination.code,
+      id: destinationCode,
+      code: destinationCode,
+      name: STATION_COORDS[destinationCode]?.name || d.train.destination.name || destinationCode,
     };
   }
 

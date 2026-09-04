@@ -31,9 +31,10 @@ export async function getTrainRoute(trainNumber: string) {
   if (cached) return cached;
 
   const route = await railradar.getRoute(trainNumber);
-  // Only cache if we have real GeoJSON route (not just station points)
+  // This object includes live station statuses/delays, so it must not use the
+  // 24-hour lifetime of the underlying static track geometry.
   if (route.geometry?.coordinates?.length >= 10) {
-    await cache.set(cacheKey, route, 86400); // 24 hr TTL
+    await cache.set(cacheKey, route, 60);
   }
   return route;
 }
@@ -44,6 +45,6 @@ export async function getTrainStations(trainNumber: string) {
   if (cached) return cached;
 
   const stations = await railradar.getStations(trainNumber);
-  await cache.set(cacheKey, stations, 86400);
+  await cache.set(cacheKey, stations, 60);
   return stations;
 }

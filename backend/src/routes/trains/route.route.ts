@@ -9,7 +9,7 @@ const routeRoute: FastifyPluginAsync = async (fastify) => {
     
     const routeData = await getTrainRoute(trainId);
     
-    reply.header('Cache-Control', 'public, max-age=86400'); // 24 hours
+    reply.header('Cache-Control', 'private, max-age=30, must-revalidate');
     return { data: routeData };
   });
 };

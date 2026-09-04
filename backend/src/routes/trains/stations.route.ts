@@ -7,7 +7,7 @@ const stationsRoute: FastifyPluginAsync = async (fastify) => {
   }, async (request, reply) => {
     const { trainId } = request.params as { trainId: string };
     const stations = await getTrainStations(trainId);
-    reply.header('Cache-Control', 'public, max-age=3600');
+    reply.header('Cache-Control', 'private, max-age=30, must-revalidate');
     return { data: stations };
   });
 };
