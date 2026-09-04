@@ -84,6 +84,19 @@ Make sure you have:
 - npm
 - Docker and Docker Compose
 
+### Recommended Windows startup
+
+Double-click `start-railgaadi.bat` in the project root. It starts PostgreSQL and
+Redis when Docker is available, builds and starts the backend, and starts the
+frontend. The launcher automatically restarts either application if it stops
+unexpectedly. Keep the launcher window open while using RailGaadi.
+
+Then open:
+
+```text
+http://localhost:5173
+```
+
 ### 1. Clone the repository
 
 ```bash

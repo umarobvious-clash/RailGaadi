@@ -12,7 +12,8 @@ export async function getLiveTrain(trainId: string): Promise<LiveJourney> {
 }
 
 export async function getTrainRoute(trainId: string): Promise<TrainRoute> {
-  const res = await fetchApi<{ data: TrainRoute }>(`/trains/${trainId}/route`);
+  // Versioned to bypass older browser caches that contained generated routes.
+  const res = await fetchApi<{ data: TrainRoute }>(`/trains/${trainId}/route?dataVersion=verified-v1`);
   return res.data;
 }
 
