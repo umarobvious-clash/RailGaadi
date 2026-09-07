@@ -6,9 +6,12 @@ export function useLiveTrain(trainId: string) {
     queryKey: ['train', 'live', trainId],
     queryFn: () => getLiveTrain(trainId),
     enabled: Boolean(trainId),
+    staleTime: 30000, // 30s cache before refetching
     refetchInterval: () => {
-      if (typeof document !== 'undefined' && document.hidden) return 60000;
-      return 15000;
+      if (typeof document !== 'undefined' && document.hidden) return 120000; // 2 min when tab hidden
+      return 45000; // 45s when tab active (prevents rate-limit quota exhaustion)
     },
+    retry: 2,
+    retryDelay: (attempt) => Math.min(attempt * 2000, 10000),
   });
 }

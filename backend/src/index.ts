@@ -1,4 +1,6 @@
 import Fastify from 'fastify';
+import path from 'path';
+import fs from 'fs';
 import { env } from './config/env';
 import { logger } from './logger';
 
@@ -62,6 +64,45 @@ const buildServer = async () => {
   await fastify.register(registerApiRoutes, { prefix: '/api/v1' });
   await fastify.register(registerApiRoutes, { prefix: '/api' });
   await fastify.register(registerApiRoutes);
+
+  // Serve frontend SPA from Fastify directly so app works as a single standalone server
+  const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');
+  if (fs.existsSync(frontendDist)) {
+    const contentTypes: Record<string, string> = {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'application/javascript; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon',
+      '.woff2': 'font/woff2',
+    };
+
+    fastify.addHook('onRequest', async (request, reply) => {
+      if (request.url.startsWith('/api')) return;
+      const cleanPath = request.url.split('?')[0];
+      const filePath = path.join(frontendDist, cleanPath === '/' ? 'index.html' : cleanPath);
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+        const ext = path.extname(filePath).toLowerCase();
+        reply.type(contentTypes[ext] || 'application/octet-stream');
+        return reply.send(fs.createReadStream(filePath));
+      }
+    });
+
+    fastify.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith('/api')) {
+        return reply.status(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: `Route ${request.method}:${request.url} not found`,
+        });
+      }
+      reply.type('text/html; charset=utf-8');
+      return reply.send(fs.createReadStream(path.join(frontendDist, 'index.html')));
+    });
+  }
 
   return fastify;
 };
