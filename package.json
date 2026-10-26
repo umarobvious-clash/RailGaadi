@@ -4,6 +4,8 @@
   "description": "RailGaadi - Real-Time Indian Railway Intelligence and Journey Companion",
   "private": true,
   "scripts": {
+    "postinstall": "npm --prefix backend install && npm --prefix frontend install",
+    "start": "node backend/dist/index.js",
     "dev": "concurrently -n \"backend,frontend\" -c \"green,cyan\" \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",

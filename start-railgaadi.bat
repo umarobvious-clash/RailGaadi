@@ -1,42 +1,44 @@
 @echo off
-title RailGaadi — Starting...
+title RailGaadi Server Launcher
 cd /d "D:\RailGaadi"
 
 echo.
-echo  ==========================================
-echo    RailGaadi — Starting All Services
-echo  ==========================================
+echo ===================================================
+echo           RailGaadi - Starting Servers
+echo ===================================================
 echo.
 
-REM Stop any existing node processes on those ports
-echo  Stopping any old RailGaadi processes...
-for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":3001 " ^| findstr "LISTENING"') do taskkill /F /PID %%a 2>nul
-for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":5173 " ^| findstr "LISTENING"') do taskkill /F /PID %%a 2>nul
+REM 1. Stop any existing processes on ports 3001 and 5173
+echo [1/3] Clearing ports 3001 and 5173...
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":3001 " ^| findstr "LISTENING"') do taskkill /F /PID %%a >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":5173 " ^| findstr "LISTENING"') do taskkill /F /PID %%a >nul 2>&1
 timeout /t 2 /nobreak >nul
+echo       Ports cleared.
+echo.
 
-REM Launch via Windows Task Scheduler (the correct permanent method)
-echo  Starting RailGaadi via Windows Task Scheduler...
-schtasks /Run /TN "RailGaadi"
+REM 2. Start Backend Fastify Server on Port 3001
+echo [2/3] Launching RailGaadi Backend (port 3001)...
+start "RailGaadi Backend" /min "D:\Program Files\nodejs\node.exe" "D:\RailGaadi\backend\dist\index.js"
+timeout /t 3 /nobreak >nul
+echo       Backend launched.
+echo.
 
-echo  Waiting for servers to start (~12 seconds)...
-timeout /t 12 /nobreak >nul
+REM 3. Start Frontend Vite Server on Port 5173
+echo [3/3] Launching RailGaadi Frontend (port 5173)...
+start "RailGaadi Frontend" /min cmd /c "cd /d D:\RailGaadi\frontend && npm run dev"
+timeout /t 4 /nobreak >nul
+echo       Frontend launched.
+echo.
 
+echo ===================================================
+echo            RailGaadi is now RUNNING!
+echo ===================================================
 echo.
-echo  Checking servers...
-curl -s -o nul -w "  Backend  (port 3001): HTTP %%{http_code}" http://localhost:3001/api/health
+echo   - App URL:          http://localhost:5173
+echo   - Backup / Direct:  http://localhost:3001
 echo.
-curl -s -o nul -w "  Frontend (port 5173): HTTP %%{http_code}" http://localhost:5173/
-echo.
-echo.
-echo  ==========================================
-echo    RailGaadi is RUNNING!
-echo  ==========================================
-echo.
-echo    Open:  http://localhost:5173
-echo.
-echo    Servers run silently in the background.
-echo    They restart automatically if they crash.
-echo    They also auto-start when Windows boots.
+echo   Keep this window or the minimized icons open while using.
+echo   Opening browser in 3 seconds...
 echo.
 timeout /t 3 /nobreak >nul
 start "" http://localhost:5173

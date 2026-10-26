@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: railgaadi
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: RAILRADAR_API_KEY
+        sync: false
+      - key: OPENWEATHER_API_KEY
+        sync: false
+      - key: OPENTOPOGRAPHY_API_KEY
+        sync: false
+      - key: MAPTILER_API_KEY
+        sync: false
